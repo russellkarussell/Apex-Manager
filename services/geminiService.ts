@@ -31,8 +31,15 @@ const driverPortraitCache: Record<string, string> = loadCache('apex_cache_driver
 const hqBackgroundCache: Record<string, string> = loadCache('apex_cache_hq_bg');
 const buildingSpriteCache: Record<string, string> = loadCache('apex_cache_buildings');
 
-if (process.env.API_KEY) {
-  ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Using Replit's AI Integrations service for Gemini access
+if (process.env.AI_INTEGRATIONS_GEMINI_API_KEY) {
+  ai = new GoogleGenAI({
+    apiKey: process.env.AI_INTEGRATIONS_GEMINI_API_KEY,
+    httpOptions: {
+      apiVersion: "",
+      baseUrl: process.env.AI_INTEGRATIONS_GEMINI_BASE_URL,
+    },
+  });
 }
 
 export const preloadEventImages = async () => {
