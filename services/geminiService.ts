@@ -1,7 +1,8 @@
 
+import { GoogleGenAI } from "@google/genai";
 import { Track } from '../types';
 
-const API_BASE = (import.meta as any).env?.DEV ? 'http://localhost:3001/api' : '/api';
+let ai: GoogleGenAI | null = null;
 
 // --- PERSISTENT CACHE STORAGE HELPER ---
 const loadCache = (key: string) => {
@@ -18,6 +19,7 @@ const saveCache = (key: string, data: Record<string, string>) => {
     try {
         localStorage.setItem(key, JSON.stringify(data));
     } catch (e) {
+        // Quota exceeded is common with base64 images
         console.warn(`Failed to save cache for ${key}`, e);
     }
 };
@@ -29,21 +31,12 @@ const driverPortraitCache: Record<string, string> = loadCache('apex_cache_driver
 const hqBackgroundCache: Record<string, string> = loadCache('apex_cache_hq_bg');
 const buildingSpriteCache: Record<string, string> = loadCache('apex_cache_buildings');
 
-async function callAPI(endpoint: string, body: any): Promise<any> {
-    const response = await fetch(`${API_BASE}${endpoint}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
-    });
-    
-    if (!response.ok) {
-        throw new Error(`API call failed: ${response.statusText}`);
-    }
-    
-    return response.json();
+if (process.env.API_KEY) {
+  ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 }
 
 export const preloadEventImages = async () => {
+    if (!ai) return;
     const scenarios: Array<'rain' | 'safety_car' | 'crash' | 'victory'> = ['rain', 'safety_car', 'crash', 'victory'];
     
     scenarios.forEach(async (type) => {
@@ -63,6 +56,8 @@ export const getRaceCommentary = async (
   leaderName: string, 
   event?: string
 ): Promise<string> => {
+  if (!ai) return "System offline.";
+
   try {
     const prompt = `
       Kommentiere das Formel-1-Rennen in EINEM kurzen Satz (max 12 Wörter).
@@ -70,24 +65,25 @@ export const getRaceCommentary = async (
       Situation: Runde ${lap}, Führender ${leaderName}, Event: ${event || 'Normal'}.
     `;
 
-    const data = await callAPI('/generate-text', { 
-        prompt, 
-        model: 'gemini-2.5-flash' 
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: prompt,
     });
-    
-    return data.text?.trim() || "Spannung auf der Strecke!";
+
+    return response.text?.trim() || "Spannung auf der Strecke!";
   } catch (error) {
     return `Runde ${lap}: Rennen läuft.`;
   }
 };
 
 export const getScoutReport = async (driverName: string): Promise<string> => {
+    if (!ai) return "Kein Bericht.";
     try {
-        const data = await callAPI('/generate-text', {
-            prompt: `Kurzer Scouting-Bericht (1 Satz) über ${driverName}. Stärke/Schwäche. Retro RPG Stil.`,
-            model: 'gemini-2.5-flash'
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: `Kurzer Scouting-Bericht (1 Satz) über ${driverName}. Stärke/Schwäche. Retro RPG Stil.`,
         });
-        return data.text?.trim() || "Vielversprechendes Talent.";
+        return response.text?.trim() || "Vielversprechendes Talent.";
     } catch (e) {
         return "Talentierter Fahrer.";
     }
@@ -99,10 +95,13 @@ export const generateDriverPortrait = async (
     nationality: string, 
     mood: string
 ): Promise<string | null> => {
+    if (!ai) return null;
     const key = `${driverName}-${teamColor}-${mood}`;
     
+    // Check Cache
     if (driverPortraitCache[key]) return driverPortraitCache[key];
 
+    // Define Body Language based on Mood
     let expression = "Neutral expression, arms crossed, professional";
     switch (mood) {
         case 'ecstatic': 
@@ -133,15 +132,19 @@ export const generateDriverPortrait = async (
     `;
 
     try {
-        const data = await callAPI('/generate-image', { 
-            prompt,
-            model: 'gemini-2.5-flash-image'
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash-image',
+            contents: { parts: [{ text: prompt }] },
         });
-        
-        if (data.image) {
-            driverPortraitCache[key] = data.image;
-            saveCache('apex_cache_drivers', driverPortraitCache);
-            return data.image;
+
+        for (const part of response.candidates?.[0]?.content?.parts || []) {
+            if (part.inlineData) {
+                const base64Image = `data:image/png;base64,${part.inlineData.data}`;
+                // Save to Cache & Storage
+                driverPortraitCache[key] = base64Image;
+                saveCache('apex_cache_drivers', driverPortraitCache);
+                return base64Image;
+            }
         }
         return null;
     } catch (e) {
@@ -150,6 +153,7 @@ export const generateDriverPortrait = async (
 };
 
 export const generateEventImage = async (eventType: 'rain' | 'safety_car' | 'crash' | 'victory', context: string): Promise<string | null> => {
+    if (!ai) return null;
     if (eventImageCache[eventType] && context === 'generic') return eventImageCache[eventType];
 
     let prompt = "";
@@ -163,22 +167,27 @@ export const generateEventImage = async (eventType: 'rain' | 'safety_car' | 'cra
     }
 
     try {
-        const data = await callAPI('/generate-image', { 
-            prompt,
-            model: 'gemini-2.5-flash-image'
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash-image',
+            contents: { parts: [{ text: prompt }] },
         });
-        
-        if (data.image && context === 'generic') {
-            eventImageCache[eventType] = data.image;
-            saveCache('apex_cache_events', eventImageCache);
+
+        for (const part of response.candidates?.[0]?.content?.parts || []) {
+            if (part.inlineData) {
+                const img = `data:image/png;base64,${part.inlineData.data}`;
+                if (context === 'generic') {
+                    eventImageCache[eventType] = img;
+                    saveCache('apex_cache_events', eventImageCache);
+                }
+                return img;
+            }
         }
-        return data.image || null;
-    } catch (e) { 
-        return null; 
-    }
+        return null;
+    } catch (e) { return null; }
 }
 
 export const generateCarTechImage = async (teamColor: string, teamName: string): Promise<string | null> => {
+    if (!ai) return null;
     const key = `${teamColor}-${teamName}`;
     if (carRenderCache[key]) return carRenderCache[key];
 
@@ -188,23 +197,25 @@ export const generateCarTechImage = async (teamColor: string, teamName: string):
     `;
 
     try {
-        const data = await callAPI('/generate-image', { 
-            prompt,
-            model: 'gemini-2.5-flash-image'
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash-image',
+            contents: { parts: [{ text: prompt }] },
         });
-        
-        if (data.image) {
-            carRenderCache[key] = data.image;
-            saveCache('apex_cache_cars', carRenderCache);
-            return data.image;
+
+        for (const part of response.candidates?.[0]?.content?.parts || []) {
+            if (part.inlineData) {
+                const img = `data:image/png;base64,${part.inlineData.data}`;
+                carRenderCache[key] = img;
+                saveCache('apex_cache_cars', carRenderCache);
+                return img;
+            }
         }
         return null;
-    } catch (e) { 
-        return null; 
-    }
+    } catch (e) { return null; }
 }
 
 export const generateVictoryImage = async (winner: string, team: string, color: string, weather: string): Promise<string | null> => {
+    if (!ai) return null;
     const prompt = `
         16-bit pixel art victory screen. F1 Driver celebrating.
         Team Color: ${color}. Weather: ${weather}.
@@ -213,36 +224,41 @@ export const generateVictoryImage = async (winner: string, team: string, color: 
     `;
 
     try {
-        const data = await callAPI('/generate-image', { 
-            prompt,
-            model: 'gemini-2.5-flash-image'
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash-image',
+            contents: { parts: [{ text: prompt }] },
         });
-        
-        return data.image || null;
-    } catch (e) { 
-        return null; 
-    }
+
+        for (const part of response.candidates?.[0]?.content?.parts || []) {
+            if (part.inlineData) {
+                return `data:image/png;base64,${part.inlineData.data}`;
+            }
+        }
+        return null;
+    } catch (e) { return null; }
 };
 
 export const generateMediaInterview = async (team: string, res: number): Promise<any> => {
+    if (!ai) return null;
     const prompt = `
         F1 Journalist Frage an Team ${team} nach Platz ${res}.
         JSON Format: { "question": "...", "journalist": "Reporter", "answers": [{"text": "...", "type": "diplomatic", "moraleImpact": 0}, ...] }
     `;
-    
     try {
-         const data = await callAPI('/generate-text', {
-             prompt,
+         const response = await ai.models.generateContent({
              model: 'gemini-2.5-flash',
+             contents: prompt,
              config: { responseMimeType: 'application/json' }
          });
-         return JSON.parse(data.text || "{}");
-    } catch(e) { 
-        return null; 
-    }
+         return JSON.parse(response.text || "{}");
+    } catch(e) { return null; }
 }
 
+// --- HQ GENERATORS (PERSISTENT LIBRARY) ---
+
 export const generateHQMapBackground = async (teamName: string): Promise<string | null> => {
+    if (!ai) return null;
+    
     if (hqBackgroundCache[teamName]) {
         return hqBackgroundCache[teamName];
     }
@@ -258,23 +274,25 @@ export const generateHQMapBackground = async (teamName: string): Promise<string 
     `;
 
     try {
-        const data = await callAPI('/generate-image', { 
-            prompt,
-            model: 'gemini-2.5-flash-image'
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash-image',
+            contents: { parts: [{ text: prompt }] },
         });
-        
-        if (data.image) {
-            hqBackgroundCache[teamName] = data.image;
-            saveCache('apex_cache_hq_bg', hqBackgroundCache);
-            return data.image;
+
+        for (const part of response.candidates?.[0]?.content?.parts || []) {
+            if (part.inlineData) {
+                const img = `data:image/png;base64,${part.inlineData.data}`;
+                hqBackgroundCache[teamName] = img;
+                saveCache('apex_cache_hq_bg', hqBackgroundCache);
+                return img;
+            }
         }
         return null;
-    } catch (e) { 
-        return null; 
-    }
+    } catch (e) { return null; }
 };
 
 export const generateBuildingSprite = async (type: string, level: number, color: string): Promise<string | null> => {
+    if (!ai) return null;
     const key = `${type}-${level}-${color}`;
     
     if (buildingSpriteCache[key]) {
@@ -293,18 +311,19 @@ export const generateBuildingSprite = async (type: string, level: number, color:
     `;
 
     try {
-        const data = await callAPI('/generate-image', { 
-            prompt,
-            model: 'gemini-2.5-flash-image'
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash-image',
+            contents: { parts: [{ text: prompt }] },
         });
-        
-        if (data.image) {
-            buildingSpriteCache[key] = data.image;
-            saveCache('apex_cache_buildings', buildingSpriteCache);
-            return data.image;
+
+        for (const part of response.candidates?.[0]?.content?.parts || []) {
+            if (part.inlineData) {
+                const img = `data:image/png;base64,${part.inlineData.data}`;
+                buildingSpriteCache[key] = img;
+                saveCache('apex_cache_buildings', buildingSpriteCache);
+                return img;
+            }
         }
         return null;
-    } catch (e) { 
-        return null; 
-    }
+    } catch (e) { return null; }
 };

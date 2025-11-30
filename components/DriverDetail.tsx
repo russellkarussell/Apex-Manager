@@ -1,18 +1,21 @@
 
 import React, { useState } from 'react';
-import { Driver, Team } from '../types';
+import { Driver } from '../types';
 import { generateDriverPortrait } from '../services/geminiService';
-import { X, Camera, Zap, Smile, Frown, Meh, Angry, Award, Flag } from 'lucide-react';
+import { X, Camera, Zap, Smile, Frown, Meh, Angry, Award, Flag, DollarSign, MessageCircle, Coffee } from 'lucide-react';
 
 interface DriverDetailProps {
     driver: Driver;
     teamColor: string;
+    teamMoney: number;
     onClose: () => void;
     updateDriver: (updatedDriver: Driver) => void;
+    onExpense: (amount: number) => void;
 }
 
-export const DriverDetail: React.FC<DriverDetailProps> = ({ driver, teamColor, onClose, updateDriver }) => {
+export const DriverDetail: React.FC<DriverDetailProps> = ({ driver, teamColor, teamMoney, onClose, updateDriver, onExpense }) => {
     const [isGenerating, setIsGenerating] = useState(false);
+    const [message, setMessage] = useState<string | null>(null);
 
     const handleGeneratePortrait = async () => {
         setIsGenerating(true);
@@ -21,6 +24,49 @@ export const DriverDetail: React.FC<DriverDetailProps> = ({ driver, teamColor, o
             updateDriver({ ...driver, portraitUrl });
         }
         setIsGenerating(false);
+    };
+
+    const handleInteraction = (action: 'bonus' | 'pep_talk' | 'calm_down') => {
+        let newMood = driver.mood;
+        let cost = 0;
+        let msg = "";
+
+        switch (action) {
+            case 'bonus':
+                cost = 50000;
+                newMood = 'ecstatic';
+                msg = "Bonus ausgezahlt! Die Motivation ist am Limit.";
+                break;
+            case 'pep_talk':
+                if (driver.mood === 'angry' || driver.mood === 'frustrated') {
+                    msg = "Er will jetzt nicht reden.";
+                } else if (driver.mood === 'ecstatic') {
+                    msg = "Er ist bereits voll motiviert.";
+                } else {
+                    // neutral -> happy, happy -> ecstatic
+                    newMood = driver.mood === 'neutral' ? 'happy' : 'ecstatic';
+                    msg = "Gutes Gespräch. Die Stimmung steigt.";
+                }
+                break;
+            case 'calm_down':
+                if (driver.mood === 'angry' || driver.mood === 'frustrated') {
+                    newMood = 'neutral';
+                    msg = "Situation beruhigt. Fokus wiederhergestellt.";
+                } else {
+                    msg = "Fahrer ist bereits ruhig.";
+                }
+                break;
+        }
+
+        setMessage(msg);
+        setTimeout(() => setMessage(null), 3000);
+
+        if (cost > 0) {
+            onExpense(cost);
+        }
+        if (newMood !== driver.mood) {
+            updateDriver({ ...driver, mood: newMood });
+        }
     };
 
     const getMoodIcon = (mood: Driver['mood']) => {
@@ -45,7 +91,7 @@ export const DriverDetail: React.FC<DriverDetailProps> = ({ driver, teamColor, o
 
     return (
         <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in">
-            <div className="bg-slate-900 w-full max-w-sm rounded-none border-4 border-slate-700 shadow-[8px_8px_0_0_#000] relative">
+            <div className="bg-slate-900 w-full max-w-sm rounded-none border-4 border-slate-700 shadow-[8px_8px_0_0_#000] relative max-h-[90vh] overflow-y-auto no-scrollbar">
                 
                 {/* Close Button */}
                 <button 
@@ -56,7 +102,7 @@ export const DriverDetail: React.FC<DriverDetailProps> = ({ driver, teamColor, o
                 </button>
 
                 {/* Portrait Area - Black background for pixel art */}
-                <div className="h-96 relative bg-black group border-b-4 border-slate-700">
+                <div className="h-72 sm:h-96 relative bg-black group border-b-4 border-slate-700 shrink-0">
                     {driver.portraitUrl ? (
                         <img 
                             src={driver.portraitUrl} 
@@ -119,6 +165,43 @@ export const DriverDetail: React.FC<DriverDetailProps> = ({ driver, teamColor, o
                         <div className="bg-slate-800 p-2 border border-slate-700 text-center">
                             <div className="text-[10px] text-slate-500 uppercase mb-1">SALARY</div>
                             <div className="font-bold text-green-400 text-[10px] font-mono">${(driver.salary/1000000).toFixed(1)}M</div>
+                        </div>
+                    </div>
+
+                    {/* Management Actions */}
+                    <h3 className="text-xs font-bold text-slate-400 uppercase mb-3 border-b border-slate-700 pb-1">Management</h3>
+                    
+                    {message && (
+                        <div className="mb-3 p-2 bg-blue-900/50 border border-blue-500 text-blue-200 text-xs font-mono text-center animate-fade-in">
+                            {message}
+                        </div>
+                    )}
+
+                    <div className="space-y-2">
+                        <button 
+                            onClick={() => handleInteraction('bonus')}
+                            disabled={teamMoney < 50000}
+                            className="w-full retro-btn py-3 flex items-center justify-between px-4 bg-green-900 border-green-500 text-green-100 hover:bg-green-800 disabled:opacity-50"
+                        >
+                            <span className="flex items-center gap-2"><DollarSign size={16} /> Performance Bonus</span>
+                            <span className="text-[10px] font-mono">-$50k</span>
+                        </button>
+                        
+                        <div className="grid grid-cols-2 gap-2">
+                            <button 
+                                onClick={() => handleInteraction('pep_talk')}
+                                className="retro-btn py-3 flex flex-col items-center justify-center bg-slate-800 text-cyan-200 hover:bg-slate-700"
+                            >
+                                <MessageCircle size={16} className="mb-1" />
+                                <span className="text-[10px]">Pep Talk</span>
+                            </button>
+                            <button 
+                                onClick={() => handleInteraction('calm_down')}
+                                className="retro-btn py-3 flex flex-col items-center justify-center bg-slate-800 text-orange-200 hover:bg-slate-700"
+                            >
+                                <Coffee size={16} className="mb-1" />
+                                <span className="text-[10px]">Beruhigen</span>
+                            </button>
                         </div>
                     </div>
                 </div>

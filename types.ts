@@ -1,23 +1,4 @@
 
-export type TireCompoundType = 'soft' | 'medium' | 'hard' | 'inter' | 'wet';
-
-export interface TireCompound {
-  type: TireCompoundType;
-  name: string;
-  grip: number; // Speed bonus 0-100
-  durability: number; // How long it lasts 0-100
-  color: string; // For UI
-  optimalTemp: 'cold' | 'normal' | 'hot';
-}
-
-export interface DriverContract {
-  yearsRemaining: number;
-  salaryPerYear: number;
-  signingBonus: number;
-  performanceBonus: number; // Per podium
-  expiresAfterRace: number; // Race index when contract expires
-}
-
 export interface Driver {
   id: string;
   name: string;
@@ -31,9 +12,6 @@ export interface Driver {
   mood: 'ecstatic' | 'happy' | 'neutral' | 'frustrated' | 'angry';
   nationality: string;
   description?: string; // AI generated backstory
-  contract?: DriverContract; // Contract details
-  marketValue?: number; // Current transfer value
-  isOnMarket?: boolean; // Available for transfer
 }
 
 export interface Car {
@@ -128,9 +106,7 @@ export enum GamePhase {
   CAR_DEV = 'CAR_DEV',
   DRIVERS = 'DRIVERS',
   HQ = 'HQ',
-  TRANSFER_MARKET = 'TRANSFER_MARKET',
   RACE_PREVIEW = 'RACE_PREVIEW',
-  RACE_STRATEGY = 'RACE_STRATEGY',
   PRACTICE = 'PRACTICE',
   QUALIFYING = 'QUALIFYING',
   RACE_LIVE = 'RACE_LIVE',
@@ -148,7 +124,7 @@ export interface CarRaceState {
   progress: number; // 0.0 to 100.0 (percentage of track)
   speed: number;
   tireHealth: number;
-  tireType: TireCompoundType;
+  tireType: 'soft' | 'hard' | 'inter'; 
   // New granular controls
   engineMode: 'low' | 'medium' | 'high' | 'overtake'; 
   drivingStyle: 'conserve' | 'balanced' | 'push';
@@ -194,55 +170,4 @@ export interface InterviewData {
         moraleImpact: number;
         type: 'diplomatic' | 'arrogant' | 'team';
     }[];
-}
-
-export interface TransferRumor {
-  id: string;
-  driverId: string;
-  driverName: string;
-  fromTeamId: string;
-  fromTeamName: string;
-  toTeamId: string;
-  toTeamName: string;
-  likelihood: number; // 0-100%
-  fee: number;
-  type: 'rumor' | 'confirmed' | 'completed';
-  createdAtRace: number;
-}
-
-export interface TransferOffer {
-  id: string;
-  driverId: string;
-  driverName: string;
-  fromTeamId: string;
-  toTeamId: string;
-  offeredSalary: number;
-  signingBonus: number;
-  contractYears: number;
-  status: 'pending' | 'accepted' | 'rejected' | 'countered';
-}
-
-export interface ContractNegotiation {
-  driverId: string;
-  driverName: string;
-  currentSalary: number;
-  demandedSalary: number;
-  demandedBonus: number;
-  demandedYears: number;
-  happiness: number; // Driver's willingness to stay 0-100
-  demands: string[]; // Special demands
-}
-
-export interface RaceStrategy {
-  startingTire: TireCompoundType;
-  plannedStops: number;
-  aggressiveness: 'conservative' | 'balanced' | 'aggressive';
-}
-
-export interface WeatherForecast {
-  current: 'sunny' | 'cloudy' | 'rain';
-  raceStart: 'sunny' | 'cloudy' | 'rain';
-  midRace: 'sunny' | 'cloudy' | 'rain';
-  rainChance: number; // 0-100%
-  temperature: number; // Celsius
 }
