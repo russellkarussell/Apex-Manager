@@ -1,5 +1,5 @@
 import React from 'react';
-import { Home, Wrench, Users, Trophy, Flag, Building2 } from 'lucide-react';
+import { Home, Wrench, Users, Trophy, Flag, Building2, ArrowRightLeft } from 'lucide-react';
 import { GamePhase } from '../types';
 
 interface NavigationProps {
@@ -12,7 +12,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentPhase, setPhase, 
   const navItems = [
     { phase: GamePhase.DASHBOARD, icon: Home, label: 'Home' },
     { phase: GamePhase.HQ, icon: Building2, label: 'HQ' },
-    { phase: GamePhase.CAR_DEV, icon: Wrench, label: 'R&D' },
+    { phase: GamePhase.TRANSFER_MARKET, icon: ArrowRightLeft, label: 'Transfer' },
     { phase: GamePhase.DRIVERS, icon: Users, label: 'Team' },
     { phase: GamePhase.STANDINGS, icon: Trophy, label: 'Rang' },
   ];

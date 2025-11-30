@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
-import { TEAMS, INITIAL_MONEY, AVAILABLE_DRIVERS, TRACKS } from './constants';
-import { GamePhase, Team, Driver, RaceResult, InterviewData, CarSetup } from './types';
+import { TEAMS, INITIAL_MONEY, AVAILABLE_DRIVERS, TRACKS, TOTAL_RACES_PER_SEASON } from './constants';
+import { GamePhase, Team, Driver, RaceResult, InterviewData, CarSetup, RaceStrategy, WeatherForecast, TransferOffer, TransferRumor } from './types';
 import { Navigation } from './components/Navigation';
 import { Headquarters } from './components/Headquarters';
 import { CarUpgrade } from './components/CarUpgrade';
@@ -12,7 +12,10 @@ import { QualifyingSession } from './components/QualifyingSession';
 import { Finances } from './components/Finances';
 import { TeamSettings } from './components/TeamSettings';
 import { DriverDetail } from './components/DriverDetail';
-import { Users, UserPlus, DollarSign, Trophy, Flag, Image as ImageIcon, Play, Loader2, SkipForward, Mic, Settings, PenTool, User } from 'lucide-react';
+import { RacePreview } from './components/RacePreview';
+import { TransferMarket } from './components/TransferMarket';
+import { ContractNegotiation } from './components/ContractNegotiation';
+import { Users, UserPlus, DollarSign, Trophy, Flag, Image as ImageIcon, Play, Loader2, SkipForward, Mic, Settings, PenTool, User, ArrowRightLeft, Newspaper, FileText } from 'lucide-react';
 import { generateVictoryImage, preloadEventImages, generateMediaInterview } from './services/geminiService';
 
 const App = () => {
@@ -27,7 +30,13 @@ const App = () => {
 
   // Race Context
   const [setupBonus, setSetupBonus] = useState(0); 
-  const [gridOrder, setGridOrder] = useState<string[]>([]); 
+  const [gridOrder, setGridOrder] = useState<string[]>([]);
+  const [raceStrategy, setRaceStrategy] = useState<RaceStrategy | null>(null);
+  const [weatherForecast, setWeatherForecast] = useState<WeatherForecast | null>(null);
+
+  // Transfer Market State
+  const [transferRumors, setTransferRumors] = useState<TransferRumor[]>([]);
+  const [showContractNegotiation, setShowContractNegotiation] = useState<Driver | null>(null);
 
   // Highlights State
   const [lastRaceWinner, setLastRaceWinner] = useState<{name: string, team: string, color: string, weather: 'sunny' | 'rain'} | null>(null);
@@ -42,6 +51,19 @@ const App = () => {
   useEffect(() => {
     preloadEventImages();
   }, []);
+
+  useEffect(() => {
+    if (phase === GamePhase.DASHBOARD && !showContractNegotiation) {
+      const expiringDrivers = playerTeam.drivers.filter(d => {
+        if (!d.contract) return false;
+        return d.contract.expiresAfterRace <= currentTrackIndex + 2;
+      });
+      
+      if (expiringDrivers.length > 0) {
+        setShowContractNegotiation(expiringDrivers[0]);
+      }
+    }
+  }, [phase, currentTrackIndex, playerTeam.drivers]);
 
   const hireDriver = (driver: Driver) => {
     if (playerTeam.drivers.length >= 2) return;
@@ -190,7 +212,68 @@ const App = () => {
 
   const handleQualifyingFinish = (grid: string[]) => {
       setGridOrder(grid);
+      setPhase(GamePhase.RACE_STRATEGY);
+  }
+
+  const handleRaceStrategyConfirm = (strategy: RaceStrategy, forecast: WeatherForecast) => {
+      setRaceStrategy(strategy);
+      setWeatherForecast(forecast);
       setPhase(GamePhase.RACE_LIVE);
+  }
+
+  const handleSignDriver = (driver: Driver, offer: TransferOffer) => {
+      if (playerTeam.drivers.length >= 2) return;
+      
+      const newDriver: Driver = {
+          ...driver,
+          teamId: playerTeam.id,
+          salary: offer.offeredSalary,
+          contract: {
+              yearsRemaining: offer.contractYears,
+              salaryPerYear: offer.offeredSalary,
+              signingBonus: offer.signingBonus,
+              performanceBonus: 50000,
+              expiresAfterRace: currentTrackIndex + (offer.contractYears * TOTAL_RACES_PER_SEASON)
+          }
+      };
+      
+      setPlayerTeam(prev => ({
+          ...prev,
+          money: prev.money - offer.signingBonus,
+          drivers: [...prev.drivers, newDriver]
+      }));
+  }
+
+  const handleContractAccept = (driver: Driver, salary: number, years: number, bonus: number) => {
+      const updatedDriver: Driver = {
+          ...driver,
+          salary: salary,
+          contract: {
+              yearsRemaining: years,
+              salaryPerYear: salary,
+              signingBonus: bonus,
+              performanceBonus: driver.contract?.performanceBonus || 50000,
+              expiresAfterRace: currentTrackIndex + (years * TOTAL_RACES_PER_SEASON)
+          }
+      };
+      
+      setPlayerTeam(prev => ({
+          ...prev,
+          money: prev.money - bonus,
+          drivers: prev.drivers.map(d => d.id === driver.id ? updatedDriver : d)
+      }));
+      setShowContractNegotiation(null);
+  }
+
+  const checkExpiringContracts = () => {
+      const expiringDrivers = playerTeam.drivers.filter(d => {
+          if (!d.contract) return false;
+          return d.contract.expiresAfterRace <= currentTrackIndex + 2;
+      });
+      
+      if (expiringDrivers.length > 0 && !showContractNegotiation) {
+          setShowContractNegotiation(expiringDrivers[0]);
+      }
   }
 
   const renderDashboard = () => (
@@ -259,19 +342,38 @@ const App = () => {
             <div className="text-[10px] text-slate-400 uppercase">Points</div>
         </div>
 
-        <div onClick={() => setPhase(GamePhase.FINANCES)} className="col-span-2 retro-box p-4 cursor-pointer hover:bg-slate-800 flex items-center justify-between">
-             <div className="flex items-center gap-3">
-                 <div className="bg-green-900/30 p-2 border border-green-800">
-                     <DollarSign className="text-green-400" size={20} />
-                 </div>
-                 <div>
-                     <div className="font-bold text-white retro-font">FINANCES</div>
-                     <div className="text-xs text-slate-400">{playerTeam.sponsors.length} SPONSORS</div>
-                 </div>
-             </div>
-             <Settings size={16} className="text-slate-500" />
+        <div onClick={() => setPhase(GamePhase.TRANSFER_MARKET)} className="retro-box p-4 cursor-pointer hover:bg-slate-800 relative">
+            <ArrowRightLeft className="text-green-400 mb-2" />
+            <div className="text-lg retro-font text-white">Transfer</div>
+            <div className="text-[10px] text-slate-400 uppercase">Markt</div>
+            {transferRumors.length > 0 && (
+                <span className="absolute top-2 right-2 bg-red-500 text-white text-xs px-1.5 py-0.5 rounded-full">
+                    {transferRumors.length}
+                </span>
+            )}
+        </div>
+
+        <div onClick={() => setPhase(GamePhase.FINANCES)} className="retro-box p-4 cursor-pointer hover:bg-slate-800">
+            <DollarSign className="text-green-400 mb-2" />
+            <div className="text-lg retro-font text-white">Finanzen</div>
+            <div className="text-[10px] text-slate-400 uppercase">{playerTeam.sponsors.length} Sponsors</div>
         </div>
       </div>
+
+      {/* Expiring Contracts Warning */}
+      {playerTeam.drivers.some(d => d.contract && d.contract.expiresAfterRace <= currentTrackIndex + 3) && (
+          <div className="retro-box p-4 bg-yellow-900/20 border-yellow-600">
+              <div className="flex items-center gap-3">
+                  <FileText className="text-yellow-400" size={24} />
+                  <div>
+                      <p className="text-yellow-400 font-bold text-sm">Verträge laufen aus!</p>
+                      <p className="text-yellow-300/70 text-xs">
+                          {playerTeam.drivers.filter(d => d.contract && d.contract.expiresAfterRace <= currentTrackIndex + 3).map(d => d.name).join(', ')}
+                      </p>
+                  </div>
+              </div>
+          </div>
+      )}
     </div>
   );
 
@@ -417,7 +519,7 @@ const App = () => {
       </div>
   );
 
-  const canNavigate = phase !== GamePhase.RACE_LIVE && phase !== GamePhase.HIGHLIGHTS && phase !== GamePhase.INTERVIEW && phase !== GamePhase.PRACTICE && phase !== GamePhase.QUALIFYING;
+  const canNavigate = phase !== GamePhase.RACE_LIVE && phase !== GamePhase.HIGHLIGHTS && phase !== GamePhase.INTERVIEW && phase !== GamePhase.PRACTICE && phase !== GamePhase.QUALIFYING && phase !== GamePhase.RACE_STRATEGY;
 
   return (
     <div className="w-full h-screen bg-[#1a1b26] text-slate-50 flex flex-col font-mono">
@@ -451,7 +553,25 @@ const App = () => {
         
         {phase === GamePhase.PRACTICE && <PracticeSession track={TRACKS[currentTrackIndex]} onFinish={handlePracticeFinish} />}
         {phase === GamePhase.QUALIFYING && <QualifyingSession track={TRACKS[currentTrackIndex]} playerTeam={playerTeam} setupBonus={setupBonus} onFinish={handleQualifyingFinish} />}
-        {phase === GamePhase.RACE_LIVE && <RaceSimulation playerTeam={playerTeam} track={TRACKS[currentTrackIndex]} gridOrder={gridOrder} setupBonus={setupBonus} onRaceFinish={handleRaceFinish} onQuit={handleQuitRace} />}
+        {phase === GamePhase.RACE_STRATEGY && (
+            <RacePreview 
+                track={TRACKS[currentTrackIndex]} 
+                playerTeam={playerTeam} 
+                setupBonus={setupBonus}
+                onStartRace={handleRaceStrategyConfirm}
+                onBack={() => setPhase(GamePhase.QUALIFYING)}
+            />
+        )}
+        {phase === GamePhase.RACE_LIVE && <RaceSimulation playerTeam={playerTeam} track={TRACKS[currentTrackIndex]} gridOrder={gridOrder} setupBonus={setupBonus} raceStrategy={raceStrategy} onRaceFinish={handleRaceFinish} onQuit={handleQuitRace} />}
+        {phase === GamePhase.TRANSFER_MARKET && (
+            <TransferMarket 
+                playerTeam={playerTeam}
+                currentRace={currentTrackIndex}
+                allTeams={TEAMS}
+                onSignDriver={handleSignDriver}
+                updateTeam={setPlayerTeam}
+            />
+        )}
         {phase === GamePhase.HIGHLIGHTS && renderHighlights()}
         {phase === GamePhase.STANDINGS && renderStandings()}
         {phase === GamePhase.INTERVIEW && interviewData && <MediaInterview interview={interviewData} team={playerTeam} onAnswer={handleInterviewAnswer} />}
@@ -459,6 +579,18 @@ const App = () => {
 
       {showSettings && <TeamSettings team={playerTeam} onSave={handleUpdateTeamSettings} onClose={() => setShowSettings(false)} />}
       {selectedDriverForDetail && <DriverDetail driver={selectedDriverForDetail} teamColor={playerTeam.color} onClose={() => setSelectedDriverForDetail(null)} updateDriver={updateDriverInTeam} />}
+      {showContractNegotiation && (
+          <ContractNegotiation 
+              driver={showContractNegotiation}
+              team={playerTeam}
+              onAccept={handleContractAccept}
+              onReject={() => {
+                  fireDriver(showContractNegotiation.id);
+                  setShowContractNegotiation(null);
+              }}
+              onClose={() => setShowContractNegotiation(null)}
+          />
+      )}
 
       <Navigation currentPhase={phase} setPhase={setPhase} canNavigate={canNavigate} />
     </div>

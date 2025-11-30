@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
-import { Track, Team, Driver, RaceResult, CarRaceState, RaceEvent } from '../types';
-import { TEAMS, AVAILABLE_DRIVERS } from '../constants';
+import { Track, Team, Driver, RaceResult, CarRaceState, RaceEvent, RaceStrategy, TireCompoundType } from '../types';
+import { TEAMS, AVAILABLE_DRIVERS, TIRE_COMPOUNDS } from '../constants';
 import { Play, Pause, AlertTriangle, Battery, Gauge, Zap, CloudRain, Sun, ShieldAlert, Image as ImageIcon, XCircle, Settings, Activity, User, Flag, RotateCcw, List, ChevronDown, ChevronUp } from 'lucide-react';
 import { getRaceCommentary, generateEventImage } from '../services/geminiService';
 
@@ -10,9 +10,15 @@ interface RaceSimulationProps {
   track: Track;
   gridOrder?: string[]; // Driver IDs in order
   setupBonus?: number; // 0-100
+  raceStrategy?: RaceStrategy | null;
   onRaceFinish: (results: RaceResult[], weather: 'sunny' | 'rain') => void;
   onQuit?: () => void;
 }
+
+const getTireStats = (tireType: TireCompoundType) => {
+  const compound = TIRE_COMPOUNDS.find(t => t.type === tireType);
+  return compound || TIRE_COMPOUNDS[1]; // Default to medium
+};
 
 // Helper to get coordinates from a path
 const useTrackPath = (pathData: string) => {
@@ -41,7 +47,7 @@ const useTrackPath = (pathData: string) => {
     return { pathRef, getPosition };
 };
 
-export const RaceSimulation: React.FC<RaceSimulationProps> = ({ playerTeam, track, gridOrder, setupBonus = 0, onRaceFinish, onQuit }) => {
+export const RaceSimulation: React.FC<RaceSimulationProps> = ({ playerTeam, track, gridOrder, setupBonus = 0, raceStrategy, onRaceFinish, onQuit }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [speedMultiplier, setSpeedMultiplier] = useState(1);
   const commentaryDebounce = useRef(0);
@@ -82,7 +88,7 @@ export const RaceSimulation: React.FC<RaceSimulationProps> = ({ playerTeam, trac
     
     // Add Player Drivers
     playerTeam.drivers.forEach(d => {
-        initialCars.push(createCarState(d, playerTeam));
+        initialCars.push(createCarState(d, playerTeam, true));
     });
 
     // Select first driver by default
@@ -139,25 +145,35 @@ export const RaceSimulation: React.FC<RaceSimulationProps> = ({ playerTeam, trac
     setCars(initialCars);
   }, []);
 
-  const createCarState = (driver: Driver, team: Team): CarRaceState => ({
-      driverId: driver.id,
-      teamId: team.id,
-      name: driver.name,
-      color: team.color,
-      lap: 0,
-      progress: 0,
-      speed: 0,
-      tireHealth: 100,
-      tireType: 'soft', // Start on Softs
-      engineMode: 'medium', // Default
-      drivingStyle: 'balanced', // Default
-      gap: 0,
-      lastLapTime: 0,
-      pitting: 0,
-      finished: false,
-      skill: driver.skill,
-      dnf: false
-  });
+  const createCarState = (driver: Driver, team: Team, isPlayerTeam: boolean = false): CarRaceState => {
+      const startingTire: TireCompoundType = isPlayerTeam && raceStrategy?.startingTire 
+          ? raceStrategy.startingTire 
+          : (Math.random() > 0.5 ? 'soft' : 'medium');
+      
+      const tireStats = getTireStats(startingTire);
+      
+      return {
+          driverId: driver.id,
+          teamId: team.id,
+          name: driver.name,
+          color: team.color,
+          lap: 0,
+          progress: 0,
+          speed: 0,
+          tireHealth: 100,
+          tireType: startingTire,
+          engineMode: 'medium',
+          drivingStyle: isPlayerTeam && raceStrategy?.aggressiveness === 'aggressive' ? 'push' 
+              : isPlayerTeam && raceStrategy?.aggressiveness === 'conservative' ? 'conserve' 
+              : 'balanced',
+          gap: 0,
+          lastLapTime: 0,
+          pitting: 0,
+          finished: false,
+          skill: driver.skill,
+          dnf: false
+      };
+  };
 
   // Main Race Loop
   useEffect(() => {
@@ -354,10 +370,15 @@ export const RaceSimulation: React.FC<RaceSimulationProps> = ({ playerTeam, trac
                   return { ...car, pitting: newPitCount, speed: 0, tireType: aiTireType };
               }
 
-              // --- Speed Calculation ---
+              // --- Speed Calculation with Tire Compound Stats ---
               let baseSpeed = (100 / track.baseLapTime);
               const skillMod = 1 + ((car.skill - 70) * 0.001);
               let currentSpeed = baseSpeed * skillMod * strategyBonus;
+
+              // Apply tire compound grip bonus (50-100 grip translates to 0.95-1.05 speed)
+              const tireStats = getTireStats(car.tireType);
+              const tireGripFactor = 0.95 + (tireStats.grip / 100) * 0.10;
+              currentSpeed *= tireGripFactor;
 
               if (car.teamId === playerTeam.id) {
                   currentSpeed *= setupSpeedFactor;
@@ -376,13 +397,17 @@ export const RaceSimulation: React.FC<RaceSimulationProps> = ({ playerTeam, trac
                   case 'push': currentSpeed *= 1.03; break;
               }
 
+              // Weather impact on different tire types
               if (currentWetness < 20) {
                   if (car.tireType === 'inter') currentSpeed *= 0.92;
+                  if (car.tireType === 'wet') currentSpeed *= 0.85;
               } else if (currentWetness > 50) {
-                  if (car.tireType === 'soft' || car.tireType === 'hard') currentSpeed *= 0.60;
+                  if (car.tireType === 'soft' || car.tireType === 'medium' || car.tireType === 'hard') currentSpeed *= 0.60;
                   if (car.tireType === 'inter') currentSpeed *= 0.95;
+                  if (car.tireType === 'wet') currentSpeed *= 1.02;
               }
 
+              // Tire health penalty based on degradation
               if (car.tireHealth < 20) currentSpeed *= 0.95; 
               if (car.tireHealth <= 0) currentSpeed *= 0.60; 
 
@@ -395,13 +420,14 @@ export const RaceSimulation: React.FC<RaceSimulationProps> = ({ playerTeam, trac
               let newLap = car.lap;
               let newFinished = false;
 
-              let wearRate = 0.05 * GAME_DELTA * engBonus;
+              // Tire wear based on compound durability (30-100 durability)
+              const tireDurabilityFactor = 2 - (tireStats.durability / 100); // Lower durability = faster wear
+              let wearRate = 0.05 * GAME_DELTA * engBonus * tireDurabilityFactor;
+              
               if (car.drivingStyle === 'conserve') wearRate *= 0.6;
               if (car.drivingStyle === 'push') wearRate *= 1.4;
               if (car.engineMode === 'high') wearRate *= 1.1;
               if (car.engineMode === 'overtake') wearRate *= 1.3;
-              if (car.tireType === 'soft') wearRate *= 1.2;
-              if (car.tireType === 'hard') wearRate *= 0.8;
               
               let newTireHealth = car.tireHealth - wearRate;
 

@@ -73,7 +73,7 @@ All generated images are cached in browser localStorage to reduce API calls.
 ## Game Features
 - Team management with customizable name and colors
 - Driver hiring/firing with mood system
-- Race weekends: Practice → Qualifying → Race
+- Race weekends: Practice → Qualifying → Strategy → Race
 - Dynamic weather and race events
 - Financial management with sponsors
 - Championship standings
@@ -81,7 +81,39 @@ All generated images are cached in browser localStorage to reduce API calls.
 - Car upgrades and HQ building
 - Retro 16-bit pixel art aesthetic
 
-## Recent Changes (Replit Import Setup)
+### New Features (Strategy & Contracts Update)
+
+#### Tire Strategy System
+- **5 tire compounds**: Soft (high grip, low durability), Medium (balanced), Hard (low grip, high durability), Intermediate, Wet
+- **Pre-race strategy screen**: Select starting tire, planned pit stops, driving style
+- **Weather forecast**: Shows current, race start, and mid-race weather predictions with rain probability
+- **Tire wear simulation**: Compounds degrade based on durability stats and driving style
+
+#### Driver Contracts
+- Drivers have contract lengths (1-4 years) with salary and bonuses
+- Contract expiration warnings on dashboard
+- Negotiation system when contracts expire
+- Driver mood affects negotiation willingness and salary demands
+
+#### Transfer Market
+- Browse available drivers with stats and market values
+- Make transfer offers to sign new drivers
+- Transfer rumors feed with likelihood percentages
+- AI teams also participate in the transfer market
+
+## Recent Changes
+
+### Latest Update - Strategy & Contracts
+- ✅ Added tire compound system with grip/durability stats
+- ✅ Created RacePreview component for pre-race strategy selection
+- ✅ Implemented weather forecast before races
+- ✅ Added driver contract system with expiration tracking
+- ✅ Created ContractNegotiation component for renewal talks
+- ✅ Built TransferMarket with driver marketplace and rumors
+- ✅ Updated Navigation with Transfer Market link
+- ✅ Enhanced RaceSimulation to use tire compound stats
+
+### Initial Setup
 - ✅ Installed Node.js 20 and all dependencies
 - ✅ Configured Vite for port 5000 with proper host settings and API proxy
 - ✅ Set up Gemini AI integration using Replit AI Integrations (secure)

@@ -1,8 +1,17 @@
 
-import { Team, Driver, Track, Staff, Facility, JuniorDriver, Sponsor } from './types';
+import { Team, Driver, Track, Staff, Facility, JuniorDriver, Sponsor, TireCompound } from './types';
 
 export const INITIAL_MONEY = 5000000;
 export const COST_CAP_LIMIT = 135000000; // $135M Budget Cap
+export const TOTAL_RACES_PER_SEASON = 10;
+
+export const TIRE_COMPOUNDS: TireCompound[] = [
+  { type: 'soft', name: 'Soft', grip: 100, durability: 30, color: '#ef4444', optimalTemp: 'hot' },
+  { type: 'medium', name: 'Medium', grip: 75, durability: 60, color: '#eab308', optimalTemp: 'normal' },
+  { type: 'hard', name: 'Hard', grip: 50, durability: 100, color: '#f5f5f5', optimalTemp: 'cold' },
+  { type: 'inter', name: 'Intermediate', grip: 60, durability: 70, color: '#22c55e', optimalTemp: 'normal' },
+  { type: 'wet', name: 'Full Wet', grip: 40, durability: 80, color: '#3b82f6', optimalTemp: 'cold' },
+];
 
 export const INITIAL_FACILITIES: Facility[] = [
     { id: 'f_factory', name: 'Fabrik', level: 1, description: 'Reduziert Kosten für Auto-Upgrades.', cost: 2000000, benefit: '-5% Kosten', type: 'factory', slot: 0 },
@@ -93,14 +102,46 @@ export const TEAMS: Team[] = [
 ];
 
 export const AVAILABLE_DRIVERS: Driver[] = [
-  { id: 'd1', name: 'Max V.', skill: 95, aggression: 90, tireManagement: 85, salary: 2000000, image: '', nationality: 'NL', mood: 'neutral' },
-  { id: 'd2', name: 'Lewis H.', skill: 94, aggression: 80, tireManagement: 95, salary: 2000000, image: '', nationality: 'GB', mood: 'neutral' },
-  { id: 'd3', name: 'Charles L.', skill: 88, aggression: 85, tireManagement: 75, salary: 1500000, image: '', nationality: 'MC', mood: 'neutral' },
-  { id: 'd4', name: 'Lando N.', skill: 85, aggression: 75, tireManagement: 80, salary: 1200000, image: '', nationality: 'GB', mood: 'neutral' },
-  { id: 'd5', name: 'Oscar P.', skill: 82, aggression: 70, tireManagement: 85, salary: 900000, image: '', nationality: 'AU', mood: 'neutral' },
-  { id: 'd6', name: 'Fernando A.', skill: 89, aggression: 88, tireManagement: 90, salary: 1400000, image: '', nationality: 'ES', mood: 'neutral' },
-  { id: 'd7', name: 'Rookie A.', skill: 60, aggression: 90, tireManagement: 50, salary: 100000, image: '', nationality: 'DE', mood: 'happy' },
-  { id: 'd8', name: 'Rookie B.', skill: 65, aggression: 60, tireManagement: 60, salary: 150000, image: '', nationality: 'FR', mood: 'neutral' }
+  { 
+    id: 'd1', name: 'Max V.', skill: 95, aggression: 90, tireManagement: 85, salary: 2000000, 
+    image: '', nationality: 'NL', mood: 'neutral', marketValue: 50000000,
+    contract: { yearsRemaining: 2, salaryPerYear: 2000000, signingBonus: 5000000, performanceBonus: 100000, expiresAfterRace: 20 }
+  },
+  { 
+    id: 'd2', name: 'Lewis H.', skill: 94, aggression: 80, tireManagement: 95, salary: 2000000, 
+    image: '', nationality: 'GB', mood: 'neutral', marketValue: 45000000,
+    contract: { yearsRemaining: 1, salaryPerYear: 2000000, signingBonus: 3000000, performanceBonus: 150000, expiresAfterRace: 10 }
+  },
+  { 
+    id: 'd3', name: 'Charles L.', skill: 88, aggression: 85, tireManagement: 75, salary: 1500000, 
+    image: '', nationality: 'MC', mood: 'neutral', marketValue: 35000000,
+    contract: { yearsRemaining: 3, salaryPerYear: 1500000, signingBonus: 2000000, performanceBonus: 80000, expiresAfterRace: 30 }
+  },
+  { 
+    id: 'd4', name: 'Lando N.', skill: 85, aggression: 75, tireManagement: 80, salary: 1200000, 
+    image: '', nationality: 'GB', mood: 'neutral', marketValue: 30000000,
+    contract: { yearsRemaining: 2, salaryPerYear: 1200000, signingBonus: 1500000, performanceBonus: 60000, expiresAfterRace: 20 }
+  },
+  { 
+    id: 'd5', name: 'Oscar P.', skill: 82, aggression: 70, tireManagement: 85, salary: 900000, 
+    image: '', nationality: 'AU', mood: 'neutral', marketValue: 20000000,
+    contract: { yearsRemaining: 2, salaryPerYear: 900000, signingBonus: 500000, performanceBonus: 40000, expiresAfterRace: 20 }
+  },
+  { 
+    id: 'd6', name: 'Fernando A.', skill: 89, aggression: 88, tireManagement: 90, salary: 1400000, 
+    image: '', nationality: 'ES', mood: 'neutral', marketValue: 25000000,
+    contract: { yearsRemaining: 1, salaryPerYear: 1400000, signingBonus: 1000000, performanceBonus: 70000, expiresAfterRace: 10 }
+  },
+  { 
+    id: 'd7', name: 'Rookie A.', skill: 60, aggression: 90, tireManagement: 50, salary: 100000, 
+    image: '', nationality: 'DE', mood: 'happy', marketValue: 2000000, isOnMarket: true,
+    contract: { yearsRemaining: 1, salaryPerYear: 100000, signingBonus: 50000, performanceBonus: 10000, expiresAfterRace: 10 }
+  },
+  { 
+    id: 'd8', name: 'Rookie B.', skill: 65, aggression: 60, tireManagement: 60, salary: 150000, 
+    image: '', nationality: 'FR', mood: 'neutral', marketValue: 3000000, isOnMarket: true,
+    contract: { yearsRemaining: 1, salaryPerYear: 150000, signingBonus: 75000, performanceBonus: 15000, expiresAfterRace: 10 }
+  }
 ];
 
 export const TRACKS: Track[] = [
